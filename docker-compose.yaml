@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  packet-capture:
+    build:
+      context: .
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./logs:/logs
