@@ -4,20 +4,16 @@ import logging
 import os
 from threading import Thread, Lock, Event
 
-# Ensure the /logs directory exists
 os.makedirs("/logs", exist_ok=True)
 
-# Setup logging to a file
 logging.basicConfig(
     filename='/logs/packets.log',
     level=logging.INFO,
     format='%(asctime)s - %(message)s'
 )
 
-# Lock for thread-safe logging
 log_lock = Lock()
 
-# Event to signal threads to stop sniffing
 stop_sniffing_event = Event()
 
 
@@ -30,8 +26,8 @@ def packet_callback(packet, args):
         if packet.haslayer('IP'):
             src_ip = packet['IP'].src
             dst_ip = packet['IP'].dst
-            protocol = packet.sprintf('%IP.proto%')  # Get the protocol type
-            payload = bytes(packet['IP'].payload)   # Extract the payload as bytes
+            protocol = packet.sprintf('%IP.proto%')
+            # payload = bytes(packet['IP'].payload)
 
             # Apply filters
             if args.src_ip and src_ip != args.src_ip:
@@ -43,7 +39,6 @@ def packet_callback(packet, args):
             if args.protocol and protocol.lower() != args.protocol.lower():
                 return
 
-            # Check port filter (for TCP/UDP packets)
             if args.port and (
                 (packet.haslayer('TCP') and packet['TCP'].sport != args.port and packet['TCP'].dport != args.port) or
                 (packet.haslayer('UDP') and packet['UDP'].sport != args.port and packet['UDP'].dport != args.port)
@@ -52,8 +47,8 @@ def packet_callback(packet, args):
 
             # Thread-safe logging
             with log_lock:
-                logging.info(f"Source: {src_ip}, Destination: {dst_ip}, Protocol: {protocol}, Payload: {payload}")
-                print(f"Source: {src_ip}, Destination: {dst_ip}, Protocol: {protocol}, Payload: {payload}")
+                logging.info(f"Source: {src_ip}, Destination: {dst_ip}, Protocol: {protocol}")
+                print(f"Source: {src_ip}, Destination: {dst_ip}, Protocol: {protocol}")
 
     except Exception as e:
         with log_lock:
@@ -81,10 +76,6 @@ def start_sniffing(interface, args):
 
 
 def main():
-    """
-    Main function to initialize threads for packet sniffing.
-    """
-    # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Multi-threaded packet capture with filtering options.")
     parser.add_argument("--src_ip", type=str, help="Filter by source IP address", default=None)
     parser.add_argument("--dest_ip", type=str, help="Filter by destination IP address", default=None)
@@ -94,7 +85,6 @@ def main():
     parser.add_argument("--interface", type=str, help="Specify a network interface to sniff on", default=None)
     args = parser.parse_args()
 
-    # List all available network interfaces
     interfaces = get_if_list()
     if args.interface:
         if args.interface not in interfaces:
@@ -104,21 +94,18 @@ def main():
 
     print(f"Using interfaces: {interfaces}")
 
-    # Start a thread for each interface
     threads = []
     for iface in interfaces:
         thread = Thread(target=start_sniffing, args=(iface, args), daemon=True)
         thread.start()
         threads.append(thread)
 
-    # Wait for user interruption and stop sniffing
     try:
         print("Press Ctrl+C to stop packet capture and save the log.")
         while True:
             pass
     except KeyboardInterrupt:
         print("\nStopping packet capture...")
-        # Signal all sniffing threads to stop
         stop_sniffing_event.set()
         for thread in threads:
             if thread.is_alive():
