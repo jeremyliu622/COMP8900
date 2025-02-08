@@ -2,20 +2,20 @@ import argparse
 from scapy.all import sniff, get_if_list
 import logging
 import os
+import json
 from threading import Thread, Lock, Event
 
+# Create logs directory
 os.makedirs("/logs", exist_ok=True)
 
 logging.basicConfig(
     filename='/logs/packets.log',
     level=logging.INFO,
-    format='%(asctime)s - %(message)s'
+    format='%(message)s'  # Log raw JSON messages for compatibility
 )
 
 log_lock = Lock()
-
 stop_sniffing_event = Event()
-
 
 def packet_callback(packet, args):
     """
@@ -27,7 +27,7 @@ def packet_callback(packet, args):
             src_ip = packet['IP'].src
             dst_ip = packet['IP'].dst
             protocol = packet.sprintf('%IP.proto%')
-            # payload = bytes(packet['IP'].payload)
+            packet_size = len(packet)
 
             # Apply filters
             if args.src_ip and src_ip != args.src_ip:
@@ -38,22 +38,27 @@ def packet_callback(packet, args):
                 return
             if args.protocol and protocol.lower() != args.protocol.lower():
                 return
-
             if args.port and (
                 (packet.haslayer('TCP') and packet['TCP'].sport != args.port and packet['TCP'].dport != args.port) or
                 (packet.haslayer('UDP') and packet['UDP'].sport != args.port and packet['UDP'].dport != args.port)
             ):
                 return
 
-            # Thread-safe logging
+            # Log packet details as JSON
+            packet_data = {
+                "src_ip": src_ip,
+                "dst_ip": dst_ip,
+                "protocol": protocol,
+                "size": packet_size
+            }
+
             with log_lock:
-                logging.info(f"Source: {src_ip}, Destination: {dst_ip}, Protocol: {protocol}")
-                print(f"Source: {src_ip}, Destination: {dst_ip}, Protocol: {protocol}")
+                logging.info(json.dumps(packet_data))
+                print(f"Captured: {packet_data}")
 
     except Exception as e:
         with log_lock:
             logging.error(f"Error processing packet: {e}")
-
 
 def start_sniffing(interface, args):
     """
@@ -73,7 +78,6 @@ def start_sniffing(interface, args):
     except Exception as e:
         with log_lock:
             logging.error(f"Error in sniffing thread for {interface}: {e}")
-
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-threaded packet capture with filtering options.")
@@ -113,7 +117,6 @@ def main():
         print("Packet capture stopped. Logs saved to /logs/packets.log.")
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-
 
 if __name__ == "__main__":
     main()
